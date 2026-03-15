@@ -1,0 +1,6 @@
+py-clob-client
+pyTelegramBotAPI
+Flask
+python-dotenv
+web3
+requests
