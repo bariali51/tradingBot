@@ -12,10 +12,23 @@ from py_clob_client.clob_types import OrderType, MarketOrderArgs
 from py_clob_client.order_builder.constants import BUY
 from py_clob_client.constants import POLYGON
 
-def validate_environment():
-    """التحقق من جميع المتغيرات المطلوبة قبل التشغيل"""
+# تحميل المتغيرات من ملف .env
+load_dotenv()
+
+# ============================================
+# ✅ دالة التحقق من متغيرات البيئة (جديدة)
+# ============================================
+def validate_env_vars():
+    """التحقق من وجود وصحة جميع المتغيرات المطلوبة"""
+    errors = []
+    
+    # التحقق من TOKEN
+    token = os.getenv("TELEGRAM_TOKEN")
+    if not token or len(token.strip()) < 10:
+        errors.append("TELEGRAM_TOKEN: غير موجود أو غير صالح")
+    
+    # التحقق من المفاتيح الأساسية
     required = {
-        "TELEGRAM_TOKEN": os.getenv("TELEGRAM_TOKEN"),
         "PRIVATE_KEY": os.getenv("PRIVATE_KEY"),
         "FUNDER_ADDRESS": os.getenv("FUNDER_ADDRESS"),
         "API_KEY": os.getenv("API_KEY"),
@@ -23,36 +36,30 @@ def validate_environment():
         "API_PASSPHRASE": os.getenv("API_PASSPHRASE"),
     }
     
-    missing = [k for k, v in required.items() if not v or not v.strip()]
+    for key, value in required.items():
+        if not value or not value.strip():
+            errors.append(f"{key}: غير موجود")
     
-    if missing:
-        print("\n" + "🔴" * 50)
-        print("❌ لا يمكن بدء البوت: متغيرات البيئة التالية مفقودة:")
-        for var in missing:
-            print(f"   • {var}")
-        print("\n📋 لإصلاح المشكلة:")
-        print("   1. افتح لوحة تحكم Railway")
-        print("   2. اذهب إلى: مشروعك → Variables")
-        print("   3. أضف المتغيرات المفقودة بالقيم الصحيحة")
-        print("   4. أعد تشغيل التطبيق (Redeploy)")
-        print("🔴" * 50 + "\n")
+    # إذا وجدت أخطاء، اعرضها وتوقف
+    if errors:
+        print("\n" + "🔴" * 60)
+        print("❌ لا يمكن تشغيل البوت - المتغيرات التالية ناقصة:")
+        for err in errors:
+            print(f"   • {err}")
+        print("\n📝 الحل:")
+        print("   1. افتح Railway Dashboard")
+        print("   2. اذهب إلى: المشروع → Variables")
+        print("   3. أضف المتغيرات المفقودة")
+        print("   4. أعد التشغيل (Redeploy)")
+        print("🔴" * 60 + "\n")
         return False
     
-    print("✅ جميع متغيرات البيئة مضبوطة بشكل صحيح!")
+    print("✅ جميع متغيرات البيئة مضبوطة ✓")
     return True
 
-# 🎯 استدعِ الدالة قبل أي كود آخر
-if __name__ == "__main__":
-    load_dotenv()
-    
-    if not validate_environment():
-        exit(1)  # توقف هنا إذا كانت المتغيرات ناقصة
-    
-    # ... بقية الكود الأصلي ...
-
-
-# تحميل المتغيرات من ملف .env
-load_dotenv()
+# 🎯 تشغيل التحقق أولاً
+if not validate_env_vars():
+    exit(1)
 
 # ============================================
 # 1. الإعدادات الأساسية (Blockchain + CLOB)
@@ -60,6 +67,7 @@ load_dotenv()
 USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
 USDC_ABI = '[{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"},{"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint8"}],"type":"function"}]'
 
+# ✅ إصلاح: إزالة المسافات الزائدة من الروابط
 RPC_LIST = [
     os.getenv("POLYGON_RPC"),
     "https://polygon-rpc.com",
@@ -71,26 +79,29 @@ def connect_web3():
     for rpc in RPC_LIST:
         if not rpc:
             continue
+        rpc = rpc.strip()  # ✅ إزالة المسافات
         try:
             w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 15}))
             if w3.is_connected():
                 print(f"✅ Web3 Connected: {rpc[:40]}...")
                 return w3
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Failed to connect to {rpc}: {e}")
             continue
     return None
 
 w3 = connect_web3()
 
+# ✅ إصلاح: إزالة المسافات الزائدة
 CLOB_HOST = "https://clob.polymarket.com"
 GAMMA_API = "https://gamma-api.polymarket.com"
 
-# ✅ إنشاء كلاس بسيط بدلاً من ApiCreds المفقود
+# ✅ إنشاء كلاس ApiCreds متوافق
 class ApiCreds:
     def __init__(self, api_key, api_secret, api_passphrase):
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.api_passphrase = api_passphrase
+        self.api_key = api_key.strip() if api_key else None
+        self.api_secret = api_secret.strip() if api_secret else None
+        self.api_passphrase = api_passphrase.strip() if api_passphrase else None
 
 api_creds = ApiCreds(
     api_key=os.getenv("API_KEY"),
@@ -98,38 +109,46 @@ api_creds = ApiCreds(
     api_passphrase=os.getenv("API_PASSPHRASE")
 )
 
-# إنشاء عميل Polymarket CLOB باستخدام ApiCreds المخصص
+# إنشاء عميل Polymarket CLOB
+private_key = os.getenv("PRIVATE_KEY")
+funder_address = os.getenv("FUNDER_ADDRESS")
+
+# ✅ التحقق من المفاتيح قبل إنشاء العميل
+if not private_key or not funder_address:
+    print("❌ خطأ: PRIVATE_KEY أو FUNDER_ADDRESS غير مضبوط")
+    exit(1)
+
 clob_client = ClobClient(
     host=CLOB_HOST,
     chain_id=POLYGON,
-    key=os.getenv("PRIVATE_KEY"),          # المفتاح الخاص للمحفظة
-    creds=api_creds,                        # ✅ تمرير الكائن بدلاً من القاموس
+    key=private_key.strip(),
+    creds=api_creds,
     signature_type=2,
-    funder=os.getenv("FUNDER_ADDRESS"),
+    funder=funder_address.strip(),
 )
 
 # ============================================
 # 2. إعدادات البوت والصلاحيات
 # ============================================
-# ✅ الكود الجديد مع التحقق من المتغيرات
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("TELEGRAM_TOKEN").strip()  # ✅ إزالة المسافات
 WALLET = os.getenv("FUNDER_ADDRESS")
 ALLOWED_CHAT_ID = int(os.getenv("ALLOWED_CHAT_ID", "0"))
 
-# 🛡️ التحقق من وجود TOKEN قبل إنشاء البوت
-if not TOKEN or len(TOKEN.strip()) < 10:
-    print("❌ خطأ فادح: TELEGRAM_TOKEN غير مضبوط أو غير صالح!")
-    print("📝 يرجى إضافة المتغير في بيئة التشغيل:")
-    print("   TELEGRAM_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz")
-    exit(1)  # إيقاف البرنامج فوراً لمنع الخطأ
+print(f"TOKEN: {'✅ OK' if TOKEN and len(TOKEN) > 10 else '❌ MISSING'}")
+print(f"WALLET: {'✅ OK - ' + WALLET[:8] + '...' if WALLET else '❌ MISSING'}")
+print(f"ALLOWED_CHAT_ID: {ALLOWED_CHAT_ID}")
 
-# ✅ الآن آمن لإنشاء البوت
-bot = TeleBot(TOKEN.strip())  # .strip() لإزالة المسافات الزائدة
+# ✅ إنشاء البوت بأمان بعد التحقق من TOKEN
+if not TOKEN or len(TOKEN) < 10:
+    print("🚨 FATAL: TELEGRAM_TOKEN غير صالح! لا يمكن إنشاء البوت.")
+    exit(1)
+
+bot = TeleBot(TOKEN)
 
 def is_authorized(message):
     """التحقق من أن المستخدم مصرح له باستخدام البوت"""
     if ALLOWED_CHAT_ID == 0:
-        return True   # إذا لم يحدد، يسمح للجميع (غير آمن)
+        return True
     return message.chat.id == ALLOWED_CHAT_ID
 
 # ============================================
@@ -151,7 +170,7 @@ state = {
     "chat_id": None,
 }
 
-waiting_for = {}  # لتخزين من ينتظر إدخال قيمة
+waiting_for = {}
 
 # ============================================
 # 4. وظائف Polymarket (جلب السوق)
@@ -159,7 +178,7 @@ waiting_for = {}  # لتخزين من ينتظر إدخال قيمة
 def get_current_15m_slug():
     """توليد slug لسوق BTC 15 دقيقة الحالي"""
     now_ts = int(time.time())
-    window_ts = now_ts - (now_ts % 900)   # بداية الربع ساعة الحالي
+    window_ts = now_ts - (now_ts % 900)
     return f"btc-updown-15m-{window_ts}", window_ts
 
 def find_market(slug):
@@ -172,7 +191,6 @@ def find_market(slug):
             return None
         event = data[0]
         markets = event.get("markets", [])
-        # البحث عن سوق "up"
         for m in markets:
             if "up" in m.get("question", "").lower():
                 return m
@@ -203,6 +221,8 @@ def get_balance():
         try:
             if not w3 or not w3.is_connected():
                 w3 = connect_web3()
+            if not w3:
+                return "Web3 connection failed"
             contract = w3.eth.contract(
                 address=w3.to_checksum_address(USDC_ADDRESS),
                 abi=USDC_ABI
@@ -210,8 +230,9 @@ def get_balance():
             bal = contract.functions.balanceOf(
                 w3.to_checksum_address(WALLET)
             ).call()
-            return bal / 10**6   # USDC له 6 أرقام عشرية
-        except Exception:
+            return bal / 10**6
+        except Exception as e:
+            print(f"Balance fetch error: {e}")
             time.sleep(2)
     return "Network Busy"
 
@@ -238,7 +259,7 @@ def seconds_until_1min_after_start():
     if wait < 0:
         next_window = window_start + 900
         wait = (next_window + 60) - now
-    return wait
+    return max(wait, 0)
 
 def seconds_until_next_15m():
     """عدد الثواني حتى نهاية الربع ساعة الحالي"""
@@ -246,7 +267,7 @@ def seconds_until_next_15m():
     return 900 - (now % 900)
 
 def trading_loop(chat_id):
-    """الحلقة الرئيسية للتداول (تعمل في خيط منفصل)"""
+    """الحلقة الرئيسية للتداول"""
     bot.send_message(chat_id, "🤖 *محرك التداول نشط*\nينتظر الربع ساعة القادم...", parse_mode="Markdown")
 
     while state["active"]:
@@ -259,7 +280,6 @@ def trading_loop(chat_id):
                     f"⏳ انتظار *{wait_secs // 60}د {wait_secs % 60}ث* لفتح الصفقة التالية",
                     parse_mode="Markdown"
                 )
-                # انتظار مع إمكانية الإيقاف
                 for _ in range(wait_secs):
                     if not state["active"]:
                         return
@@ -268,7 +288,6 @@ def trading_loop(chat_id):
             if not state["active"]:
                 return
 
-            # --- وقت فتح الصفقة ---
             slug, window_ts = get_current_15m_slug()
             window_time = datetime.fromtimestamp(window_ts, tz=timezone.utc).strftime("%H:%M UTC")
 
@@ -299,7 +318,6 @@ def trading_loop(chat_id):
                 state["active"] = False
                 return
 
-            # إرسال إشعار بالصفقة
             bot.send_message(
                 chat_id,
                 f"🚀 *فتح صفقة UP*\n"
@@ -309,7 +327,6 @@ def trading_loop(chat_id):
                 parse_mode="Markdown"
             )
 
-            # تنفيذ الأمر
             resp = place_up_order(amount, token_id)
 
             if resp:
@@ -317,11 +334,10 @@ def trading_loop(chat_id):
             else:
                 bot.send_message(chat_id, "⚠️ فشل وضع الصفقة، سيحاول في الدورة القادمة")
 
-            # انتظار نهاية الربع ساعة (حتى تنتهي الفترة)
             time_left = seconds_until_next_15m()
             bot.send_message(chat_id, f"⏱ انتظار نهاية السوق... (`{time_left // 60}د {time_left % 60}ث`)", parse_mode="Markdown")
 
-            for _ in range(time_left + 5):
+            for _ in range(min(time_left + 5, 120)):  # حد أقصى 120 ثانية
                 if not state["active"]:
                     return
                 time.sleep(1)
@@ -337,7 +353,7 @@ def trading_loop(chat_id):
                     if prices and len(prices) > 0:
                         resolved_price = float(prices[0])
 
-                if resolved_price >= 0.95:  # ربح
+                if resolved_price >= 0.95:
                     profit = amount * (1 / resolved_price - 1)
                     state["total_pnl"] += profit
                     state["loss_streak"] = 0
@@ -350,7 +366,7 @@ def trading_loop(chat_id):
                         f"الدورة القادمة: `{state['current_amount']:.2f} USDC` (أساس)",
                         parse_mode="Markdown"
                     )
-                else:  # خسارة
+                else:
                     state["total_pnl"] -= amount
                     state["loss_streak"] += 1
 
@@ -379,22 +395,20 @@ def trading_loop(chat_id):
                 bot.send_message(chat_id, f"⚠️ لم يتحقق من النتيجة: {e}")
 
         except Exception as e:
-            bot.send_message(chat_id, f"⚠️ خطأ: {e}")
+            bot.send_message(chat_id, f"⚠️ خطأ في الحلقة: {e}")
             time.sleep(30)
 
     bot.send_message(chat_id, "🛑 تم إيقاف التداول")
 
 # ============================================
-# 7. لوحات المفاتيح (Keyboards)
+# 7. لوحات المفاتيح
 # ============================================
 def get_menu():
-    """لوحة الأوامر الرئيسية"""
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add("🚀 Start Trading", "🛑 Stop Trading", "💰 My Balance", "⚙️ Settings")
     return markup
 
 def get_settings_keyboard():
-    """لوحة الإعدادات (Inline)"""
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton(f"💵 قيمة الصفقة: {settings['trade_amount']} USDC", callback_data="set_trade_amount"),
@@ -406,7 +420,6 @@ def get_settings_keyboard():
     return markup
 
 def settings_text():
-    """نص عرض الإعدادات"""
     return (
         "⚙️ *الإعدادات الحالية*\n\n"
         f"💵 قيمة الصفقة: `{settings['trade_amount']} USDC`\n"
@@ -418,7 +431,7 @@ def settings_text():
     )
 
 # ============================================
-# 8. معالجات الأوامر (Handlers)
+# 8. معالجات الأوامر
 # ============================================
 @bot.message_handler(commands=['start'])
 def welcome(message):
@@ -454,7 +467,6 @@ def start_trading(message):
     state["current_amount"] = settings["trade_amount"]
     state["loss_streak"] = 0
     state["total_pnl"] = 0.0
-    # بدء حلقة التداول في خيط منفصل
     t = threading.Thread(target=trading_loop, args=(message.chat.id,), daemon=True)
     t.start()
 
@@ -510,5 +522,5 @@ def handle_setting_input(message):
 # 9. تشغيل البوت
 # ============================================
 if __name__ == "__main__":
-    print("🤖 Bot started!")
-    bot.polling(none_stop=True)
+    print("🤖 Bot started successfully!")
+    bot.polling(none_stop=True, timeout=30)
