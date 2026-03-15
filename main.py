@@ -12,6 +12,45 @@ from py_clob_client.clob_types import OrderType, MarketOrderArgs
 from py_clob_client.order_builder.constants import BUY
 from py_clob_client.constants import POLYGON
 
+def validate_environment():
+    """التحقق من جميع المتغيرات المطلوبة قبل التشغيل"""
+    required = {
+        "TELEGRAM_TOKEN": os.getenv("TELEGRAM_TOKEN"),
+        "PRIVATE_KEY": os.getenv("PRIVATE_KEY"),
+        "FUNDER_ADDRESS": os.getenv("FUNDER_ADDRESS"),
+        "API_KEY": os.getenv("API_KEY"),
+        "API_SECRET": os.getenv("API_SECRET"),
+        "API_PASSPHRASE": os.getenv("API_PASSPHRASE"),
+    }
+    
+    missing = [k for k, v in required.items() if not v or not v.strip()]
+    
+    if missing:
+        print("\n" + "🔴" * 50)
+        print("❌ لا يمكن بدء البوت: متغيرات البيئة التالية مفقودة:")
+        for var in missing:
+            print(f"   • {var}")
+        print("\n📋 لإصلاح المشكلة:")
+        print("   1. افتح لوحة تحكم Railway")
+        print("   2. اذهب إلى: مشروعك → Variables")
+        print("   3. أضف المتغيرات المفقودة بالقيم الصحيحة")
+        print("   4. أعد تشغيل التطبيق (Redeploy)")
+        print("🔴" * 50 + "\n")
+        return False
+    
+    print("✅ جميع متغيرات البيئة مضبوطة بشكل صحيح!")
+    return True
+
+# 🎯 استدعِ الدالة قبل أي كود آخر
+if __name__ == "__main__":
+    load_dotenv()
+    
+    if not validate_environment():
+        exit(1)  # توقف هنا إذا كانت المتغيرات ناقصة
+    
+    # ... بقية الكود الأصلي ...
+
+
 # تحميل المتغيرات من ملف .env
 load_dotenv()
 
@@ -72,15 +111,20 @@ clob_client = ClobClient(
 # ============================================
 # 2. إعدادات البوت والصلاحيات
 # ============================================
+# ✅ الكود الجديد مع التحقق من المتغيرات
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WALLET = os.getenv("FUNDER_ADDRESS")
 ALLOWED_CHAT_ID = int(os.getenv("ALLOWED_CHAT_ID", "0"))
 
-print(f"TOKEN: {'OK' if TOKEN else 'MISSING'}")
-print(f"WALLET: {'OK - ' + WALLET[:8] + '...' if WALLET else 'MISSING'}")
-print(f"ALLOWED_CHAT_ID: {ALLOWED_CHAT_ID}")
+# 🛡️ التحقق من وجود TOKEN قبل إنشاء البوت
+if not TOKEN or len(TOKEN.strip()) < 10:
+    print("❌ خطأ فادح: TELEGRAM_TOKEN غير مضبوط أو غير صالح!")
+    print("📝 يرجى إضافة المتغير في بيئة التشغيل:")
+    print("   TELEGRAM_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz")
+    exit(1)  # إيقاف البرنامج فوراً لمنع الخطأ
 
-bot = TeleBot(TOKEN)
+# ✅ الآن آمن لإنشاء البوت
+bot = TeleBot(TOKEN.strip())  # .strip() لإزالة المسافات الزائدة
 
 def is_authorized(message):
     """التحقق من أن المستخدم مصرح له باستخدام البوت"""
